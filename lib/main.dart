@@ -1,6 +1,5 @@
 import 'package:english_words/english_words.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 
 void main() {
@@ -29,15 +28,23 @@ class MyApp extends StatelessWidget { // ← 無狀態的 widget，內容一旦�
 class MyAppState extends ChangeNotifier {
   var current = WordPair.random();
 
+  var history = <WordPair>[];
+
+  GlobalKey? historyListKey;
+
 /* 新的 getNext() 重新指派 current 作爲作爲一個新的隨機 WordPair, 並且
 呼叫 notifyListeners(a method of ChangeNotifier),確保所有觀察 MyAppState 的人都會被通知到。 */
   void getNext() { 
+    history.insert(0, current);
+    var animatedList = historyListKey?.currentState as AnimatedListState?;
+    animatedList?.insertItem(0);
     current = WordPair.random();  // ← WordPair 是由兩個隨機字詞組成的組合。常用於創建隨機文字生成器應用程式中。
     notifyListeners();
   }
   var favorites = <WordPair>[];
 
-  void toggleFavorite() {
+  void toggleFavorite([WordPair? pair]) {
+    pair = pair ?? current; // ← 哪一個有值就給哪一個
     if (favorites.contains(current)) {
       favorites.remove(current);
     } else {
@@ -66,6 +73,9 @@ var selectedIndex = 0;  // ← The new stateful widget only needs to track one v
 
   @override
   Widget build(BuildContext context) {
+  
+   var colorScheme = Theme.of(context).colorScheme;
+
 
 /* The code declares a new variable, page, of the type Widget.
 Then, a switch statement assigns a screen to page, according to the current value in selectedIndex.*/
@@ -82,46 +92,81 @@ switch (selectedIndex) {
     throw UnimplementedError('no widget for $selectedIndex');
 }
 
-    return LayoutBuilder(
-      builder: (context, Constraints) {  //  ← Modify the callback parameter list from (context) to (context, constraints).
-        return Scaffold(
-          body: Row(
-            children: [
-              SafeArea(
-                child: NavigationRail(
-                  extended: Constraints.maxWidth >= 600,
-                  destinations: [
-                    NavigationRailDestination(
-                      icon: Icon(Icons.home),
-                      label: Text('Home'),
-                    ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.favorite),
-                      label: Text('Favorites'),
-                    ),
-                  ],
-                  selectedIndex: selectedIndex,
-                  onDestinationSelected: (value) {  // ← 類似 notifyListeners() 確保 UI 更新.
-                    
-                    setState(() {
-                      selectedIndex = value;
-                    });                         // ← This instead of ' print('selected: $value')'
-                  },
+  // The container for the current page, with its background color
+    // and subtle switching animation.
+    var mainArea = ColoredBox(
+      color: colorScheme.surfaceVariant,
+      child: AnimatedSwitcher(
+        duration: Duration(milliseconds: 200),
+        child: page,
+      ),
+    );
+
+    return Scaffold(
+      body: LayoutBuilder(
+        builder: (context, constraints) {   //  ← Modify the callback parameter list from (context) to (context, constraints).
+          if (constraints.maxWidth < 450) {
+            // Use a more mobile-friendly layout with BottomNavigationBar
+            // on narrow screens.
+            return Column(
+              children: [
+                Expanded(child: mainArea),
+                SafeArea(
+                  child: BottomNavigationBar(
+                    items: [
+                      BottomNavigationBarItem(
+                        icon: Icon(Icons.home),
+                        label: 'Home',
+                      ),
+                      BottomNavigationBarItem(
+                        icon: Icon(Icons.favorite),
+                        label: 'Favorites',
+                      ),
+                    ],
+                    currentIndex: selectedIndex,
+                    onTap: (value) {
+                      setState(() {
+                        selectedIndex = value;
+                      });
+                    },
+                  ),
+                )
+              ],
+            );
+          } else {
+            return Row(
+              children: [
+                SafeArea(
+                  child: NavigationRail(
+                    extended: constraints.maxWidth >= 600,
+                    destinations: [
+                      NavigationRailDestination(
+                        icon: Icon(Icons.home),
+                        label: Text('Home'),
+                      ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.favorite),
+                        label: Text('Favorites'),
+                      ),
+                    ],
+                    selectedIndex: selectedIndex,
+                    onDestinationSelected: (value) {  // ← 類似 notifyListeners() 確保 UI 更新.
+                      setState(() {
+                        selectedIndex = value;
+                      });           // ← This instead of ' print('selected: $value')'
+                    },
+                  ),
                 ),
-              ),
-              Expanded(
-                child: Container(
-                  color: Theme.of(context).colorScheme.primaryContainer,
-                  child: page,
-                ),
-              ),
-            ],
-          ),
-        );
-      }
+                Expanded(child: mainArea),
+              ],
+            );
+          }
+        },
+      ),
     );
   }
 }
+
 
 class GeneratorPage extends StatelessWidget {
   @override
@@ -143,6 +188,12 @@ class GeneratorPage extends StatelessWidget {
           children: [
           //Text('A random AWESOME idea:'), // ← cleaner that way.
           //Text(pair.asLowerCase)  // ← WordPair 提供了幾個有用的 getters，例如 asPascalCase 或 asSnakeCase。在這裡使用的是 asLowerCase
+            Expanded(
+            flex: 3,
+            child: HistoryListView(),
+          ),
+            SizedBox(height: 10),
+
             BIGCARD(pair: pair), // ← refactor 後 Extract Widget
             SizedBox(height: 10), // ← more separation between the two widgets. SizedBox widgets 只佔用空間，並不會自己渲染任何內容。
             Row(   // ← let 'Like' button on the left to the 'Next' button, needs 'Row'
@@ -165,6 +216,7 @@ class GeneratorPage extends StatelessWidget {
                 ),
               ],
             ),
+            Spacer(flex: 2),
           ],
         ),
       );
@@ -194,7 +246,10 @@ class BIGCARD extends StatelessWidget {
           text: TextSpan (
             style: style,
             children: <TextSpan>[
-              TextSpan(text: pairList[0]),
+              TextSpan(
+                text: pairList[0],
+                style: TextStyle(fontWeight: FontWeight.w200)
+                ),
               TextSpan(
                 text: pairList[1],
                 style: TextStyle(fontWeight: FontWeight.bold)
@@ -212,6 +267,8 @@ class FavoritesPage extends StatelessWidget {
   Widget build(BuildContext context) {
     var appState = context.watch<MyAppState>();
 
+    var theme = Theme.of(context);
+
     if (appState.favorites.isEmpty) {
       return Center(
         child: Text('No favorites yet.'),
@@ -220,11 +277,11 @@ class FavoritesPage extends StatelessWidget {
 
     return GridView.count(
       crossAxisCount: 2, // 設置列數為 2
-      childAspectRatio: 5.1,
+      childAspectRatio: 4.1,
  
       children: [
         Padding(
-          padding: const EdgeInsets.all(2.0),
+          padding: const EdgeInsets.all(20),
           child: Text('You have '
               '${appState.favorites.length} favorites:')
         ),
@@ -235,14 +292,80 @@ class FavoritesPage extends StatelessWidget {
         for (var pair in appState.favorites)
           GridTile(
               child: ListTile(
-                leading: Icon(Icons.delete_outlined),
+                leading: Icon(
+                  Icons.delete_outlined,
+                  semanticLabel: 'Delete',
+                  color: theme.colorScheme.primary
+                  ),
                 title: Text(pair.asCamelCase),
-                onTap: (){ appState.removeFavorite(pair);
-                           // 刪除對應的項目
+                onTap: (){ appState.removeFavorite(pair); // ← 刪除對應的項目
                 },
               ),
           ),
       ],
+    );
+  }
+}
+
+
+class HistoryListView extends StatefulWidget {
+  const HistoryListView({Key? key}) : super(key: key);
+
+  @override
+  State<HistoryListView> createState() => _HistoryListViewState();
+}
+
+class _HistoryListViewState extends State<HistoryListView> {
+  /// Needed so that [MyAppState] can tell [AnimatedList] below to animate
+  /// new items.
+  final _key = GlobalKey();
+
+  /// Used to "fade out" the history items at the top, to suggest continuation.
+  static const Gradient _maskingGradient = LinearGradient(
+    // This gradient goes from fully transparent to fully opaque black...
+    colors: [Colors.transparent, Colors.black],
+    // ... from the top (transparent) to half (0.5) of the way to the bottom.
+    stops: [0.0, 0.5],
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final appState = context.watch<MyAppState>();
+    appState.historyListKey = _key;
+
+    return ShaderMask(
+      shaderCallback: (bounds) => _maskingGradient.createShader(bounds),
+      // This blend mode takes the opacity of the shader (i.e. our gradient)
+      // and applies it to the destination (i.e. our animated list).
+      blendMode: BlendMode.dstIn,
+      child: AnimatedList(
+        key: _key,
+        reverse: true,
+        padding: EdgeInsets.only(top: 100),
+        initialItemCount: appState.history.length,
+        itemBuilder: (context, index, animation) {
+          final pair = appState.history[index];
+          return SizeTransition(
+            sizeFactor: animation,
+            child: Center(
+              child: TextButton.icon(
+                onPressed: () {
+                  appState.toggleFavorite(pair);
+                },
+                icon: appState.favorites.contains(pair)
+                    ? Icon(Icons.favorite, size: 12)
+                    : SizedBox(),
+                label: Text(
+                  pair.asLowerCase,
+                  semanticsLabel: pair.asPascalCase,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }
