@@ -27,10 +27,10 @@ class MyApp extends StatelessWidget { // ← 無狀態的 widget，內容一旦�
 
 class MyAppState extends ChangeNotifier {
   var current = WordPair.random();
-
   var history = <WordPair>[];
 
   GlobalKey? historyListKey;
+  GlobalKey? historyListKey2;
 
 /* 新的 getNext() 重新指派 current 作爲作爲一個新的隨機 WordPair, 並且
 呼叫 notifyListeners(a method of ChangeNotifier),確保所有觀察 MyAppState 的人都會被通知到。 */
@@ -38,6 +38,8 @@ class MyAppState extends ChangeNotifier {
     history.insert(0, current);
     var animatedList = historyListKey?.currentState as AnimatedListState?;
     animatedList?.insertItem(0);
+    var animatedList2 = historyListKey2?.currentState as AnimatedListState?;
+    animatedList2?.insertItem(0);
     current = WordPair.random();  // ← WordPair 是由兩個隨機字詞組成的組合。常用於創建隨機文字生成器應用程式中。
     notifyListeners();
   }
@@ -45,10 +47,10 @@ class MyAppState extends ChangeNotifier {
 
   void toggleFavorite([WordPair? pair]) {
     pair = pair ?? current; // ← 哪一個有值就給哪一個
-    if (favorites.contains(current)) {
-      favorites.remove(current);
+    if (favorites.contains(pair)) {
+      favorites.remove(pair);
     } else {
-      favorites.add(current);
+      favorites.add(pair);
     }
     notifyListeners();
   }
@@ -173,15 +175,20 @@ class GeneratorPage extends StatelessWidget {
   Widget build(BuildContext context) {        // ← 定義了一個 build()，在 widget 的環境發生變化時自動調用，讓 widget 始終保持最新狀態。
     var appState = context.watch<MyAppState>();  // ← 透過 watch 追蹤當前狀態改變
     var pair = appState.current; 
+    
 
 // Like 心型圖案設置
-  IconData icon;  
-    if (appState.favorites.contains(pair)) {
-      icon = Icons.favorite;
-    } else {
-      icon = Icons.favorite_border;
-    }
+    // IconData favoriteIcon;  
+    // if (appState.favorites.contains(pair)) {
+    //   favoriteIcon = Icons.favorite;
+    // } else {
+    //   favoriteIcon = Icons.favorite_border;
+    // }   優化前
+    final isFavorite = appState.favorites.contains(pair);
+    final favoriteIcon = isFavorite ? Icons.favorite : Icons.favorite_border;
 
+    IconData nextIcon = Icons.navigate_next;
+       
     return Center(
         child: Column(  // ← one of the most basic layout widgets。可以接收任意數量的 children,從上到下排列成一個垂直的列,彈性設置。
           mainAxisAlignment: MainAxisAlignment.center,  // ← Center the UI
@@ -192,10 +199,9 @@ class GeneratorPage extends StatelessWidget {
             flex: 3,
             child: HistoryListView(),
           ),
-            SizedBox(height: 10),
-
+            const SizedBox(height: 10),
             BIGCARD(pair: pair), // ← refactor 後 Extract Widget
-            SizedBox(height: 10), // ← more separation between the two widgets. SizedBox widgets 只佔用空間，並不會自己渲染任何內容。
+            const SizedBox(height: 10), // ← more separation between the two widgets. SizedBox widgets 只佔用空間，並不會自己渲染任何內容。
             Row(   // ← let 'Like' button on the left to the 'Next' button, needs 'Row'
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -203,21 +209,26 @@ class GeneratorPage extends StatelessWidget {
                   onPressed: () {
                     appState.toggleFavorite();
                   },                          //connect 'Like' button to toggleFavorites().
-                  icon: Icon(icon),
-                  label: Text('Like'),
+                  icon: Icon(favoriteIcon),
+                  label: const Text('Like'),
                 ),
-                SizedBox(width: 10),
+               const SizedBox(width: 10),
 
-                ElevatedButton(
+                ElevatedButton.icon(
                   onPressed: () {
                     appState.getNext();  // ← This instead of 'print('button pressed!')'.
                   },
-                  child: Text('Next'),
+                  icon: Icon(nextIcon),
+                  label: const Text('Next'),
                 ),
               ],
             ),
-            Spacer(flex: 2),
-          ],
+            const SizedBox(height: 10),
+            Expanded(
+            flex: 3,
+            child: HistoryListView2(),
+          ),  
+         ],
         ),
       );
   }
@@ -317,12 +328,12 @@ class HistoryListView extends StatefulWidget {
 
 class _HistoryListViewState extends State<HistoryListView> {
   /// Needed so that [MyAppState] can tell [AnimatedList] below to animate
-  /// new items.
+  /// 新的 items.
   final _key = GlobalKey();
 
-  /// Used to "fade out" the history items at the top, to suggest continuation.
+  /// Used to "漸出" the history items at the top, to suggest continuation.
   static const Gradient _maskingGradient = LinearGradient(
-    // This gradient goes from fully transparent to fully opaque black...
+    // 設定從“透明”到“黑”的顏色漸層
     colors: [Colors.transparent, Colors.black],
     // ... from the top (transparent) to half (0.5) of the way to the bottom.
     stops: [0.0, 0.5],
@@ -343,6 +354,7 @@ class _HistoryListViewState extends State<HistoryListView> {
       child: AnimatedList(
         key: _key,
         reverse: true,
+        shrinkWrap: true,
         padding: EdgeInsets.only(top: 100),
         initialItemCount: appState.history.length,
         itemBuilder: (context, index, animation) {
@@ -358,8 +370,64 @@ class _HistoryListViewState extends State<HistoryListView> {
                     ? Icon(Icons.favorite, size: 12)
                     : SizedBox(),
                 label: Text(
-                  pair.asLowerCase,
-                  semanticsLabel: pair.asPascalCase,
+                  pair.asCamelCase,
+                  semanticsLabel: pair.asCamelCase,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+
+class HistoryListView2 extends StatefulWidget {
+  const HistoryListView2({Key? key}) : super(key: key);
+
+  @override
+  State<HistoryListView2> createState() => _HistoryListViewState2();
+}
+
+class _HistoryListViewState2 extends State<HistoryListView2> {
+  final _key2 = GlobalKey();
+  static const Gradient _maskingGradient = LinearGradient(
+    colors: [Colors.transparent, Colors.black],
+    stops: [0.0, 1.0],
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final appState = context.watch<MyAppState>();
+    appState.historyListKey2 = _key2;
+
+    return ShaderMask(
+      shaderCallback: (bounds) => _maskingGradient.createShader(bounds),
+      blendMode: BlendMode.dstOut,
+      child: AnimatedList(
+        key: _key2,
+        reverse: false,
+        shrinkWrap: true,
+        padding: EdgeInsets.only(bottom: 100),
+        initialItemCount: appState.history.length,
+        itemBuilder: (context, index, animation) {
+          final pair = appState.history[index];
+          return SizeTransition(
+            sizeFactor: animation,
+            child: Center(
+              child: TextButton.icon(
+                onPressed: () {
+                  appState.toggleFavorite(pair);
+                },
+                icon: appState.favorites.contains(pair)
+                    ? Icon(Icons.favorite, size: 12)
+                    : SizedBox(),
+                label: Text(
+                  pair.asCamelCase,
+                  semanticsLabel: pair.asCamelCase,
                 ),
               ),
             ),
